@@ -2,22 +2,16 @@
 
 namespace Nuwave\Lighthouse\Schema\Directives;
 
-use Closure;
-use GraphQL\Deferred;
 use GraphQL\Type\Definition\ResolveInfo;
-use Illuminate\Database\Eloquent\Model;
-use Nuwave\Lighthouse\Execution\DataLoader\BatchLoader;
-use Nuwave\Lighthouse\Execution\DataLoader\RelationBatchLoader;
-use Nuwave\Lighthouse\Schema\Values\FieldValue;
-use Nuwave\Lighthouse\Support\Contracts\DefinedDirective;
+use Nuwave\Lighthouse\Execution\DataLoader\RelationLoader;
+use Nuwave\Lighthouse\Execution\DataLoader\SimpleRelationLoader;
 use Nuwave\Lighthouse\Support\Contracts\FieldMiddleware;
-use Nuwave\Lighthouse\Support\Contracts\GraphQLContext;
 
-class WithDirective extends RelationDirective implements FieldMiddleware, DefinedDirective
+class WithDirective extends WithRelationDirective implements FieldMiddleware
 {
     public static function definition(): string
     {
-        return /** @lang GraphQL */ <<<'SDL'
+        return /** @lang GraphQL */ <<<'GRAPHQL'
 """
 Eager-load an Eloquent relation.
 """
@@ -32,50 +26,20 @@ directive @with(
   Apply scopes to the underlying query.
   """
   scopes: [String!]
-) on FIELD_DEFINITION
-SDL;
+) repeatable on FIELD_DEFINITION
+GRAPHQL;
     }
 
-    /**
-     * Eager load a relation on the parent instance.
-     */
-    public function handleField(FieldValue $fieldValue, Closure $next): FieldValue
+    protected function relationName(): string
     {
-        $resolver = $fieldValue->getResolver();
+        return $this->directiveArgValue('relation')
+            ?? $this->nodeName();
+    }
 
-        return $next(
-            $fieldValue->setResolver(
-                function (Model $parent, array $args, GraphQLContext $context, ResolveInfo $resolveInfo) use ($resolver): Deferred {
-                    $loader = BatchLoader::instance( // @phpstan-ignore-line TODO remove when updating graphql-php
-                        RelationBatchLoader::class,
-                        $resolveInfo->path,
-                        [
-                            'relationName' => $this->directiveArgValue('relation', $this->nodeName()),
-                            'decorateBuilder' => function ($query) use ($resolveInfo) {
-                                $resolveInfo
-                                    ->argumentSet
-                                    ->enhanceBuilder(
-                                        $query,
-                                        $this->directiveArgValue('scopes', [])
-                                    );
-                            },
-                        ]
-                    );
-
-                    return new Deferred(function () use ($loader, $resolver, $parent, $args, $context, $resolveInfo) {
-                        return $loader
-                            ->load(
-                                $parent->getKey(),
-                                ['parent' => $parent]
-                            )
-                            ->then(
-                                function () use ($resolver, $parent, $args, $context, $resolveInfo) {
-                                    return $resolver($parent, $args, $context, $resolveInfo);
-                                }
-                            );
-                    });
-                }
-            )
+    protected function relationLoader(ResolveInfo $resolveInfo): RelationLoader
+    {
+        return new SimpleRelationLoader(
+            $this->decorateBuilder($resolveInfo)
         );
     }
 }

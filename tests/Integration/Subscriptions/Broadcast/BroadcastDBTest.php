@@ -11,26 +11,26 @@ use Tests\Utils\Models\Task;
 
 class BroadcastDBTest extends DBTestCase
 {
-    protected $schema = '
+    protected $schema = /** @lang GraphQL */ '
     type Task {
         id: ID!
         name: String!
     }
-    
+
     type Query {
         task(id: Int @eq): Task @first
     }
-    
+
     type Mutation {
         updateTask(id: Int! @eq, name: String!): Task @update @broadcast(subscription: "taskUpdated")
     }
-    
+
     type Subscription {
         taskUpdated: Task
     }
     ';
 
-    protected function getPackageProviders($app)
+    protected function getPackageProviders($app): array
     {
         return array_merge(
             parent::getPackageProviders($app),
@@ -38,7 +38,7 @@ class BroadcastDBTest extends DBTestCase
         );
     }
 
-    protected function setUp(): void
+    public function setUp(): void
     {
         parent::setUp();
 
